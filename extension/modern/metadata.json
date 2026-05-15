@@ -1,0 +1,6 @@
+{
+  "name": "Workman",
+  "description": "Exposes window information for Workman session manager",
+  "uuid": "workman@workman",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}

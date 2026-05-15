@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "workman"
+version = "0.1.0"
+description = "Save and restore your desktop sessions"
+authors = [{name = "lumaseg"}]
+requires-python = ">=3.8"
+dependencies = ["pyxdg"]
+
+[project.scripts]
+workman = "workman.cli:main"

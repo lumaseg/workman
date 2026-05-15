@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>com.github.lumaseg.workman</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Workman</name>
+  <summary>Save and restore your desktop sessions</summary>
+
+  <description>
+    <p>
+      Workman remembers which apps you had open, where they were on screen, and how
+      big they were — so you can pick up exactly where you left off.
+    </p>
+    <p>
+      With a single command you can save your entire desktop layout — every open app,
+      its position, and its size — and restore it all later with another single command.
+      You can save as many named sessions as you like and switch between them instantly.
+    </p>
+    <p>Requires the Workman GNOME Shell extension to be installed and enabled.</p>
+  </description>
+
+  <developer id="com.github.lumaseg">
+    <name>lumaseg</name>
+  </developer>
+
+  <url type="homepage">https://github.com/lumaseg/workman</url>
+  <url type="bugtracker">https://github.com/lumaseg/workman/issues</url>
+
+  <launchable type="desktop-id">com.github.lumaseg.workman.desktop</launchable>
+
+  <provides>
+    <binary>workman</binary>
+  </provides>
+
+  <releases>
+    <release version="0.1.0" date="2026-04-28">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1"/>
+</component>

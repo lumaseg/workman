@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Workman
+Comment=Save and restore your desktop sessions
+Exec=workman
+Terminal=true
+Type=Application
+Categories=Utility;
+NoDisplay=true
