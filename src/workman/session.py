@@ -21,6 +21,22 @@ class WorkmanError(Exception):
     pass
 
 
+def _check_supported_session():
+    desktop = os.environ.get('XDG_CURRENT_DESKTOP', '')
+    session_type = os.environ.get('XDG_SESSION_TYPE', '')
+    is_gnome = 'GNOME' in desktop.upper()
+    is_wayland = session_type.lower() == 'wayland' if session_type else True
+    if is_gnome and is_wayland:
+        return
+    raise WorkmanError(
+        "This version of Workman supports GNOME on Wayland only.\n"
+        f"  Detected desktop: {desktop or 'unknown'}\n"
+        f"  Detected session: {session_type or 'unknown'}\n"
+        "Support for KDE, XFCE, and wlroots-based compositors is "
+        "planned for future versions."
+    )
+
+
 def ensure_sessions_dir():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +96,7 @@ def get_exe_from_pid(pid):
         return None
 
 def save_session(name):
+    _check_supported_session()
     ensure_sessions_dir()
     windows = get_open_windows()
     
@@ -98,6 +115,7 @@ def save_session(name):
     print(f"Session '{name}' saved with {len(windows)} windows.")
 
 def restore_session(name):
+    _check_supported_session()
     session_file = SESSIONS_DIR / f"{name}.json"
     if not session_file.exists():
         print(f"Session '{name}' not found.")

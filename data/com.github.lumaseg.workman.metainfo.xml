@@ -34,6 +34,11 @@
   </provides>
 
   <releases>
+    <release version="0.1.1" date="2026-05-18">
+      <description>
+        <p>Detect unsupported desktop environments and print a clear message; this version supports GNOME on Wayland only.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-04-28">
       <description>
         <p>Initial release.</p>
