@@ -8,3 +8,4 @@ dist/
 build/
 build-dir/
 .flatpak-builder/
+WORKMAN_BUILD_PROGRESS.md
