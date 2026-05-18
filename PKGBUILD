@@ -9,7 +9,7 @@ license=('MIT')
 depends=('python' 'python-pyxdg')
 makedepends=('python-hatchling' 'python-build' 'python-installer')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # replace with real checksum
+sha256sums=('a7c2b32c57b53edaebaa36b87b99d41ced7e4976f460c19c4d281fed3b026ad2')
 
 build() {
     cd "$pkgname-$pkgver"

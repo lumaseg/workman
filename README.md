@@ -135,7 +135,6 @@ When you restore a session, Workman:
 - Auto-save session on logout
 - Support for multiple monitors
 - KDE Plasma support
-- Flatpak packaging
 
 ---
 

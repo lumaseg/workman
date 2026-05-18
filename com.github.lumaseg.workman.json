@@ -1,7 +1,7 @@
 {
     "app-id": "com.github.lumaseg.workman",
     "runtime": "org.freedesktop.Platform",
-    "runtime-version": "23.08",
+    "runtime-version": "25.08",
     "sdk": "org.freedesktop.Sdk",
     "command": "workman",
     "finish-args": [
@@ -91,7 +91,7 @@
                     "type": "git",
                     "url": "https://github.com/lumaseg/workman.git",
                     "tag": "v0.1.0",
-                    "commit": "431a98ec3bf224fb5f82b1eebec3c78be16ba328"
+                    "commit": "fcb4636cb4809321dc2eb77228f95b50ecc29429"
                 }
             ]
         }

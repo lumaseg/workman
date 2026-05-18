@@ -1,0 +1,16 @@
+pkgbase = workman
+	pkgdesc = GNOME session manager — saves and restores open windows
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/lumaseg/workman
+	arch = any
+	license = MIT
+	makedepends = python-hatchling
+	makedepends = python-build
+	makedepends = python-installer
+	depends = python
+	depends = python-pyxdg
+	source = workman-0.1.0.tar.gz::https://github.com/lumaseg/workman/archive/v0.1.0.tar.gz
+	sha256sums = a7c2b32c57b53edaebaa36b87b99d41ced7e4976f460c19c4d281fed3b026ad2
+
+pkgname = workman
