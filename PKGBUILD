@@ -10,7 +10,7 @@ depends=('python' 'python-pyxdg')
 optdepends=('gnome-shell: required at runtime (workman supports GNOME Wayland only; KDE/XFCE/wlroots planned)')
 makedepends=('python-hatchling' 'python-build' 'python-installer')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # set after v0.1.1 tarball is published
+sha256sums=('38dd51c7f1c50c1e7aec8657ed61c66c590edf7e9dc0690ed8e19a82c2353df8')
 
 build() {
     cd "$pkgname-$pkgver"
