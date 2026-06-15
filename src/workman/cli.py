@@ -1,11 +1,16 @@
 import argparse
 import sys
-from workman import session
+from workman import __version__, session
 
 def main():
     parser = argparse.ArgumentParser(
         prog='workman',
         description='Save and restore your desktop sessions'
+    )
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'%(prog)s {__version__}'
     )
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 

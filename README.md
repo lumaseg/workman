@@ -107,6 +107,11 @@ workman list
 workman delete mysession
 ```
 
+### Check the installed version
+```bash
+workman --version
+```
+
 ---
 
 ## Example workflow
@@ -155,6 +160,7 @@ When you restore a session, Workman:
 
 ## Roadmap
 
+- Save and restore open browser tabs/websites as part of a session
 - GUI for managing sessions
 - Auto-save session on logout
 - Support for multiple monitors
