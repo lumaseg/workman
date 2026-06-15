@@ -15,6 +15,10 @@ const DBusInterface = `
       <arg type="i" direction="in" name="height"/>
       <arg type="b" direction="out" name="success"/>
     </method>
+    <method name="CloseWindow">
+      <arg type="u" direction="in" name="id"/>
+      <arg type="b" direction="out" name="success"/>
+    </method>
   </interface>
 </node>`;
 
@@ -27,6 +31,7 @@ const service = {
             const win = actor.meta_window;
             const rect = win.get_frame_rect();
             return {
+                id: win.get_stable_sequence(),
                 title: win.get_title(),
                 wm_class: win.get_wm_class(),
                 pid: win.get_pid(),
@@ -46,6 +51,17 @@ const service = {
         );
         if (index >= matches.length) return false;
         matches[index].meta_window.move_resize_frame(false, x, y, width, height);
+        return true;
+    },
+
+    CloseWindow(id) {
+        // Identify by stable sequence so closing is unaffected by index shifts.
+        const actor = global.get_window_actors().find(actor =>
+            actor.meta_window.get_stable_sequence() === id
+        );
+        if (!actor) return false;
+        // Graceful close — the app still gets to prompt for unsaved work.
+        actor.meta_window.delete(global.get_current_time());
         return true;
     },
 };

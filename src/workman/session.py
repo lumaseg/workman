@@ -89,6 +89,29 @@ def move_window(wm_class, index, x, y, width, height, retries=5, delay=1):
         time.sleep(delay)
     return False
 
+def close_window(window_id):
+    """Gracefully close a window by its stable id via the GNOME extension."""
+    cmd = [
+        'gdbus', 'call',
+        '--session',
+        '--dest', 'org.workman.WindowManager',
+        '--object-path', '/org/workman/WindowManager',
+        '--method', 'org.workman.WindowManager.CloseWindow',
+        str(window_id)
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if '(true,)' in result.stdout:
+        return True
+    if 'ServiceUnknown' in result.stderr:
+        raise WorkmanError(EXTENSION_MISSING_MSG)
+    if 'UnknownMethod' in result.stderr:
+        raise WorkmanError(
+            "The installed Workman extension is too old to close windows.\n"
+            "Reinstall it (see README) and log out and back in:\n"
+            "    ./scripts/install-extension.sh"
+        )
+    return False
+
 def get_exe_from_pid(pid):
     try:
         return os.readlink(f"/proc/{pid}/exe")
@@ -114,7 +137,7 @@ def save_session(name):
         json.dump(windows, f, indent=2)
     print(f"Session '{name}' saved with {len(windows)} windows.")
 
-def restore_session(name):
+def restore_session(name, close_others=False):
     _check_supported_session()
     session_file = SESSIONS_DIR / f"{name}.json"
     if not session_file.exists():
@@ -123,26 +146,75 @@ def restore_session(name):
     with open(session_file, 'r') as f:
         windows = json.load(f)
 
-    print("Launching apps...")
-    launched_exes = set()
-    for window in windows:
-        exe = window.get('exe')
-        if not exe:
-            continue
-        # Only launch each exe once per unique instance
-        exe_key = f"{exe}_{window.get('class_index', 0)}"
-        if exe_key in launched_exes:
-            continue
-        try:
-            cmd = ["flatpak-spawn", "--host", exe] if IN_FLATPAK else [exe]
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            launched_exes.add(exe_key)
-            print(f"  Launched {exe}")
-        except Exception as e:
-            print(f"  Could not launch {exe}: {e}")
+    # Look at what's already on screen so we can reuse running apps instead of
+    # relaunching them. This also fails fast with a clear message if the
+    # extension isn't available (we'd be unable to move windows either way).
+    current_windows = get_open_windows()
+    open_counts = defaultdict(int)
+    for window in current_windows:
+        open_counts[window.get('wm_class', '')] += 1
 
-    print("Waiting for apps to open...")
-    time.sleep(5)
+    # Group the target windows by app. The first N instances of each app are
+    # assumed to be covered by windows already open; only the remainder need
+    # launching.
+    target_by_class = defaultdict(list)
+    for window in windows:
+        target_by_class[window.get('wm_class', '')].append(window)
+
+    # With --close-others, anything open that the session doesn't need is shut.
+    # Keep the first N windows of each app (those get reused/repositioned) and
+    # close the rest, plus every window of an app not in the session at all.
+    # Windows without a wm_class (desktop/shell components) are never touched.
+    if close_others:
+        keep_remaining = {cls: len(wins) for cls, wins in target_by_class.items()}
+        to_close = []
+        for window in current_windows:
+            wm_class = window.get('wm_class', '')
+            if not wm_class:
+                continue
+            if keep_remaining.get(wm_class, 0) > 0:
+                keep_remaining[wm_class] -= 1
+            else:
+                to_close.append(window)
+        if to_close:
+            print(f"Closing {len(to_close)} window(s) not in this session...")
+            for window in to_close:
+                window_id = window.get('id')
+                label = window.get('wm_class') or window.get('title') or 'window'
+                if window_id is None:
+                    print(f"  Skipped {label} (update the extension to enable closing)")
+                    continue
+                if close_window(window_id):
+                    print(f"  Closed {label}")
+                else:
+                    print(f"  Could not close {label}")
+
+    print("Launching missing apps...")
+    launched_any = False
+    reused_any = False
+    for wm_class, target_windows in target_by_class.items():
+        already_open = open_counts.get(wm_class, 0)
+        if already_open:
+            reused = min(already_open, len(target_windows))
+            print(f"  Reusing {reused} already-open {wm_class or 'window'}")
+            reused_any = True
+        for window in target_windows[already_open:]:
+            exe = window.get('exe')
+            if not exe:
+                continue
+            try:
+                cmd = ["flatpak-spawn", "--host", exe] if IN_FLATPAK else [exe]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                launched_any = True
+                print(f"  Launched {exe}")
+            except Exception as e:
+                print(f"  Could not launch {exe}: {e}")
+
+    if launched_any:
+        print("Waiting for apps to open...")
+        time.sleep(5)
+    elif reused_any:
+        print("All required apps already open; repositioning...")
 
     print("Restoring window positions...")
     for window in windows:

@@ -34,6 +34,11 @@
   </provides>
 
   <releases>
+    <release version="0.1.2" date="2026-06-16">
+      <description>
+        <p>Faster session switching: restore now reuses already-open windows instead of launching duplicates, and the new "restore --close-others" flag closes apps that are not part of the session.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-05-18">
       <description>
         <p>Detect unsupported desktop environments and print a clear message; this version supports GNOME on Wayland only.</p>

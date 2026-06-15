@@ -73,7 +73,29 @@ Give your session any name you like — `work`, `dev`, `music`, `morning` — wh
 workman restore mysession
 ```
 
-Workman will relaunch all your apps and put them back exactly where they were.
+Workman puts every app back exactly where it was. If some of the apps the
+session needs are **already open**, Workman keeps them running and just moves
+them into place — only the missing apps are launched. This makes restoring feel
+like switching between layouts rather than rebuilding the desktop from scratch.
+By default, apps that are open but aren't part of the session are left alone.
+
+#### Clean switch — close everything else
+
+To make the desktop match the session *exactly*, add `--close-others`:
+
+```bash
+workman restore mysession --close-others
+```
+
+Any window that isn't part of the session is closed (apps the session needs are
+kept and repositioned as usual). Closing is graceful — it's the same as clicking
+an app's close button, so anything with unsaved work still gets its
+"save changes?" prompt. Windows that belong to the desktop or GNOME Shell itself
+are never touched.
+
+> **Note:** `--close-others` needs the updated GNOME Shell extension. If you
+> installed Workman before this feature, reinstall the extension
+> (`./scripts/install-extension.sh`) and log out and back in.
 
 ### List all saved sessions
 ```bash
@@ -113,9 +135,11 @@ When you save a session, Workman:
 
 When you restore a session, Workman:
 1. Reads the saved session file
-2. Launches each app
-3. Waits for apps to open
-4. Moves and resizes each window to its saved position
+2. Checks which of the required apps are already open
+3. Launches only the apps that are missing (reusing the ones already running)
+4. Optionally (with `--close-others`) closes any window that isn't part of the session
+5. Waits for any newly-launched apps to open
+6. Moves and resizes every window — reused and new — to its saved position
 
 ---
 

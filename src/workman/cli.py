@@ -14,6 +14,11 @@ def main():
 
     restore_parser = subparsers.add_parser('restore', help='Restore a session')
     restore_parser.add_argument('name', help='Session name')
+    restore_parser.add_argument(
+        '--close-others',
+        action='store_true',
+        help='Close apps that are open but not part of this session'
+    )
 
     subparsers.add_parser('list', help='List all saved sessions')
 
@@ -26,7 +31,7 @@ def main():
         if args.command == 'save':
             session.save_session(args.name)
         elif args.command == 'restore':
-            session.restore_session(args.name)
+            session.restore_session(args.name, close_others=args.close_others)
         elif args.command == 'list':
             session.list_sessions()
         elif args.command == 'delete':
