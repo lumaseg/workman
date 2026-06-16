@@ -51,15 +51,25 @@ These are **Phase 1** (GitHub Releases) instructions. See the distribution
 roadmap for the planned Phase 2 move to the openSUSE Build Service (OBS) for
 auto-updating apt/dnf repositories.
 
-1. Cut the release as usual (bump version, tag `vX.Y.Z`, push — see the
-   top-level release flow). Build packages from the **tagged** tree:
-   ```bash
-   git checkout vX.Y.Z
-   packaging/build-packages.sh
-   ```
-2. Attach both files in `dist-packages/` to the GitHub Release for that tag
-   (e.g. `gh release upload vX.Y.Z dist-packages/*`).
-3. Users then install the downloaded file:
+The whole sequence — version bump, commit/tag/push, tarball-sha pin, package
+build + GitHub Release, and the AUR update — is automated by the top-level
+[`release.sh`](../release.sh), which also runs the lumaseg anonymity pre-flight
+as a hard gate:
+
+```bash
+./release.sh X.Y.Z "one-line release notes"
+```
+
+It pauses for confirmation before each outward-facing step. To build packages
+by hand instead (e.g. to inspect them first), run from the **tagged** tree:
+
+```bash
+git checkout vX.Y.Z
+packaging/build-packages.sh
+gh release upload vX.Y.Z dist-packages/*
+```
+
+Either way, users then install the downloaded file:
    - **Ubuntu/Debian:** `sudo apt install ./workman_X.Y.Z_all.deb`
      (`apt install ./file.deb` resolves `python3-xdg` / recommends `gnome-shell`
      from the archive).
