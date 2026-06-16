@@ -1,6 +1,6 @@
 # Maintainer: lumaseg
 pkgname=workman
-pkgver=0.1.2
+pkgver=0.1.3
 pkgrel=1
 pkgdesc="GNOME Wayland session manager — save and restore open windows"
 arch=('any')

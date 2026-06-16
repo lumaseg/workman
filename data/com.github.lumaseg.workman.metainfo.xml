@@ -34,6 +34,11 @@
   </provides>
 
   <releases>
+    <release version="0.1.3" date="2026-06-17">
+      <description>
+        <p>Add 'workman --version'; provide official Debian/Ubuntu (.deb) and Fedora (.rpm) packages.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-06-16">
       <description>
         <p>Faster session switching: restore now reuses already-open windows instead of launching duplicates, and the new "restore --close-others" flag closes apps that are not part of the session.</p>
