@@ -24,7 +24,37 @@ You can save as many named sessions as you like. Switch between a "work" layout,
 
 ## Installation
 
-Workman has two parts: a Python CLI and a small GNOME Shell extension. Both need to be installed.
+Workman has two parts: a Python CLI and a small GNOME Shell extension. The
+distribution packages below install **both** in one step and pick the correct
+extension variant for your GNOME version automatically; installing from source
+installs them separately.
+
+After any method, you must **log out and back in** once (see
+[Activate the extension](#activate-the-extension)).
+
+### Arch Linux (AUR)
+
+```bash
+yay -S workman      # or: paru -S workman
+```
+
+### Ubuntu / Debian
+
+Download `workman_<version>_all.deb` from the
+[latest release](https://github.com/lumaseg/workman/releases/latest), then:
+
+```bash
+sudo apt install ./workman_<version>_all.deb
+```
+
+### Fedora
+
+Download `workman-<version>-1.noarch.rpm` from the
+[latest release](https://github.com/lumaseg/workman/releases/latest), then:
+
+```bash
+sudo dnf install ./workman-<version>-1.noarch.rpm
+```
 
 ### From source
 
