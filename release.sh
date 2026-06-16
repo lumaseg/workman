@@ -75,6 +75,16 @@ who=$(ssh -o BatchMode=yes -T "git@$ORIGIN_HOST" 2>&1 | head -1 || true)
 echo "$who" | grep -q "Hi $PSEUDO_NAME" || die "ssh git@$ORIGIN_HOST does not greet $PSEUDO_NAME (got: $who)"
 ok "on main, clean, identity + remote + SSH all resolve to $PSEUDO_NAME"
 
+# Check phase-4/5 tooling NOW, before any irreversible push, so a missing tool
+# can never leave a half-finished release (git pushed but no packages/AUR).
+if [ "$SKIP_PACKAGES" = 0 ]; then
+    need fpm; need rpmbuild; need gh
+    ghuser=$(gh api user --jq .login 2>/dev/null || true)
+    [ "$ghuser" = "$PSEUDO_NAME" ] || die "gh is authenticated as '${ghuser:-none}', not $PSEUDO_NAME — run 'gh auth switch' (or pass --skip-packages)"
+    ok "packaging tools present; gh authenticated as $PSEUDO_NAME"
+fi
+[ "$SKIP_AUR" = 0 ] && { need makepkg; ok "makepkg present for AUR"; }
+
 # ============================================================================
 step "Phase 1 — bump version to $VERSION"
 sed -i -E 's/^version = ".*"/version = "'"$VERSION"'"/' pyproject.toml
@@ -125,11 +135,7 @@ ok "pushed sha256 pin"
 # ============================================================================
 if [ "$SKIP_PACKAGES" = 0 ]; then
     step "Phase 4 — build .deb/.rpm and attach to the GitHub Release"
-    need fpm; need gh
-    # gh uses API auth (NOT ssh) — make sure it is the lumaseg account, or we
-    # would create the Release under the wrong identity.
-    ghuser=$(gh api user --jq .login 2>/dev/null || true)
-    [ "$ghuser" = "$PSEUDO_NAME" ] || die "gh is authenticated as '${ghuser:-none}', not $PSEUDO_NAME — run 'gh auth switch' (skip with --skip-packages)"
+    # tooling + gh-is-lumaseg already verified in Phase 0.
     if confirm "build packages and create GitHub Release $TAG?"; then
         packaging/build-packages.sh
         gh release create "$TAG" dist-packages/* --title "$TAG" --notes "$NOTES"
@@ -144,7 +150,6 @@ fi
 # ============================================================================
 if [ "$SKIP_AUR" = 0 ]; then
     step "Phase 5 — update AUR"
-    need makepkg
     if confirm "clone, update, and push the AUR package?"; then
         AURDIR="$(mktemp -d)/aur-workman"
         git clone "$AUR_URL" "$AURDIR"
