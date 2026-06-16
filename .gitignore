@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 dist/
+dist-packages/
 build/
 build-dir/
 .flatpak-builder/
