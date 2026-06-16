@@ -39,6 +39,9 @@ python3 -m installer --destdir "$WORK/install" "$WORK"/dist/workman-*.whl
 PKG_PARENT="$(dirname "$(find "$WORK/install" -type d -name workman -path '*site-packages*')")"
 mkdir -p "$STAGE/usr/lib/workman"
 cp -r "$PKG_PARENT/workman" "$PKG_PARENT"/workman-*.dist-info "$STAGE/usr/lib/workman/"
+# Drop build-machine bytecode — it's compiled for this host's python version
+# and useless (silently ignored) on the target's python.
+find "$STAGE/usr/lib/workman" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 # 3. Distro-agnostic launcher.
 mkdir -p "$STAGE/usr/bin"
