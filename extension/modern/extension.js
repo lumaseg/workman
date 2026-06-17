@@ -1,5 +1,32 @@
 import Gio from 'gi://Gio';
 
+// Find window actors matching a saved wm_class, tolerating differences in how
+// the same app is packaged across machines (e.g. a session saved against the
+// Flatpak Firefox's "org.mozilla.firefox" being restored onto a native
+// Firefox whose class is just "firefox"). Exact matches always win; looser
+// tiers are only consulted when the exact class isn't present, so a window
+// with the real class is never mis-routed.
+function matchWindows(actors, wmClass) {
+    const classOf = a => a.meta_window.get_wm_class() || '';
+
+    let matches = actors.filter(a => classOf(a) === wmClass);
+    if (matches.length) return matches;
+
+    const want = wmClass.toLowerCase();
+    matches = actors.filter(a => classOf(a).toLowerCase() === want);
+    if (matches.length) return matches;
+
+    // Compare the final dotted segment (org.mozilla.firefox -> firefox) and
+    // allow substring overlap either way.
+    const lastSegment = s => s.toLowerCase().split('.').pop();
+    const wantSeg = lastSegment(wmClass);
+    return actors.filter(a => {
+        const c = classOf(a).toLowerCase();
+        if (!c) return false;
+        return lastSegment(c) === wantSeg || c.includes(want) || want.includes(c);
+    });
+}
+
 const DBusInterface = `
 <node>
   <interface name="org.workman.WindowManager">
@@ -63,11 +90,7 @@ export default class WorkmanExtension {
     }
 
     MoveWindow(wm_class, index, x, y, width, height) {
-        const actors = global.get_window_actors();
-        // Get all windows matching wm_class
-        const matches = actors.filter(actor =>
-            actor.meta_window.get_wm_class() === wm_class
-        );
+        const matches = matchWindows(global.get_window_actors(), wm_class);
 
         if (index >= matches.length) {
             return false;

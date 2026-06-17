@@ -118,6 +118,24 @@ def get_exe_from_pid(pid):
     except:
         return None
 
+def get_flatpak_id(pid):
+    """Return the Flatpak application id for a process, or None.
+
+    A Flatpak app's /proc/<pid>/exe resolves to its in-sandbox path
+    (e.g. /app/extra/.../spotify), which does not exist on the host and so
+    cannot be relaunched directly. The sandbox exposes its app id in
+    /proc/<pid>/root/.flatpak-info, which we use to relaunch via
+    `flatpak run <id>` instead.
+    """
+    try:
+        with open(f"/proc/{pid}/root/.flatpak-info") as f:
+            for line in f:
+                if line.startswith("name="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        return None
+    return None
+
 def save_session(name):
     _check_supported_session()
     ensure_sessions_dir()
@@ -131,6 +149,9 @@ def save_session(name):
         pid = window.get('pid')
         if pid:
             window['exe'] = get_exe_from_pid(pid)
+            flatpak_id = get_flatpak_id(pid)
+            if flatpak_id:
+                window['flatpak'] = flatpak_id
 
     session_file = SESSIONS_DIR / f"{name}.json"
     with open(session_file, 'w') as f:
@@ -199,16 +220,24 @@ def restore_session(name, close_others=False):
             print(f"  Reusing {reused} already-open {wm_class or 'window'}")
             reused_any = True
         for window in target_windows[already_open:]:
+            flatpak_id = window.get('flatpak')
             exe = window.get('exe')
-            if not exe:
+            # Flatpak apps must be relaunched via `flatpak run <id>`; their
+            # saved exe is an in-sandbox path that doesn't exist on the host.
+            if flatpak_id:
+                cmd, label = ['flatpak', 'run', flatpak_id], f"flatpak run {flatpak_id}"
+            elif exe:
+                cmd, label = [exe], exe
+            else:
                 continue
+            if IN_FLATPAK:
+                cmd = ["flatpak-spawn", "--host", *cmd]
             try:
-                cmd = ["flatpak-spawn", "--host", exe] if IN_FLATPAK else [exe]
                 subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 launched_any = True
-                print(f"  Launched {exe}")
+                print(f"  Launched {label}")
             except Exception as e:
-                print(f"  Could not launch {exe}: {e}")
+                print(f"  Could not launch {label}: {e}")
 
     if launched_any:
         print("Waiting for apps to open...")
