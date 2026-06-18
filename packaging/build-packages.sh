@@ -74,6 +74,9 @@ COMMON=(
 )
 
 OUTDIR="$REPO_ROOT/dist-packages"
+# Start clean so stale artifacts from an earlier version can't linger — release.sh
+# attaches the whole directory to the GitHub Release with `dist-packages/*`.
+rm -rf "$OUTDIR"
 mkdir -p "$OUTDIR"
 
 for t in $TARGETS; do
