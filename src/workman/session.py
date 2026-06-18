@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from collections import defaultdict
 
+from workman import browsers
+
 IN_FLATPAK = os.path.exists("/.flatpak-info")
 
 SESSIONS_DIR = Path.home() / ".local" / "share" / "workman" / "sessions"
@@ -136,6 +138,33 @@ def get_flatpak_id(pid):
         return None
     return None
 
+def _attach_browser_urls(windows):
+    """Record each browser window's open tabs so restore can reopen them.
+
+    Best-effort and read-only: the GNOME windows and the browser's own
+    session-store window list are correlated by order (geometry-to-window
+    correlation isn't reliable), and any failure leaves windows without a
+    `urls` key — restore simply launches them without tabs. Older sessions
+    saved before this feature have no `urls` key and stay valid.
+    """
+    firefox_windows = [w for w in windows if browsers.is_firefox(w.get('wm_class'))]
+    if not firefox_windows:
+        return
+    try:
+        url_windows = browsers.get_firefox_window_urls()
+    except Exception:
+        url_windows = []
+    if not url_windows:
+        return
+    captured = 0
+    for window, urls in zip(firefox_windows, url_windows):
+        window['urls'] = urls
+        captured += len(urls)
+    if captured:
+        print(f"Captured {captured} Firefox tab(s) across "
+              f"{min(len(firefox_windows), len(url_windows))} window(s).")
+
+
 def save_session(name):
     _check_supported_session()
     ensure_sessions_dir()
@@ -152,6 +181,8 @@ def save_session(name):
             flatpak_id = get_flatpak_id(pid)
             if flatpak_id:
                 window['flatpak'] = flatpak_id
+
+    _attach_browser_urls(windows)
 
     session_file = SESSIONS_DIR / f"{name}.json"
     with open(session_file, 'w') as f:
@@ -230,6 +261,15 @@ def restore_session(name, close_others=False):
                 cmd, label = [exe], exe
             else:
                 continue
+            # Reopen a browser window's saved tabs: the first URL gets the new
+            # window, the rest open as tabs in it. Only windows we launch get
+            # their tabs back; reused already-open windows keep what they have.
+            urls = window.get('urls')
+            if urls and browsers.is_firefox(wm_class):
+                cmd = cmd + ['--new-window', urls[0]]
+                for url in urls[1:]:
+                    cmd += ['--new-tab', url]
+                label += f" (+{len(urls)} tab(s))"
             if IN_FLATPAK:
                 cmd = ["flatpak-spawn", "--host", *cmd]
             try:

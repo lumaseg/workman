@@ -98,6 +98,25 @@ workman save mysession
 
 Give your session any name you like — `work`, `dev`, `music`, `morning` — whatever makes sense to you.
 
+#### Firefox tabs
+
+When you save a session, Workman also records the tabs open in each **Firefox**
+window (read from Firefox's own session store on disk). Restoring the session
+reopens those tabs in a fresh Firefox window. This works out of the box — no
+add-on and no extra dependency.
+
+A couple of things worth knowing:
+
+- Tabs are reopened only for Firefox windows that Workman **launches**. If
+  Firefox is already running and the window gets reused, its current tabs are
+  left as they are.
+- Internal pages (`about:…`) are skipped, since they can't be reopened from the
+  command line.
+
+> **Privacy:** the URLs you have open are written, in clear text, into the
+> session file under `~/.local/share/workman/sessions/`. Treat saved sessions as
+> sensitive if your tabs are.
+
 ### Restore a session
 ```bash
 workman restore mysession
@@ -166,14 +185,15 @@ Workman uses a GNOME Shell extension to communicate with the desktop environment
 When you save a session, Workman:
 1. Asks the GNOME extension for a list of all open windows
 2. Records each window's app, position, size and title
-3. Saves everything to a JSON file in `~/.local/share/workman/sessions/`
+3. Reads Firefox's session store to record the tabs open in each Firefox window
+4. Saves everything to a JSON file in `~/.local/share/workman/sessions/`
 
 When you restore a session, Workman:
 1. Reads the saved session file
 2. Checks which of the required apps are already open
 3. Launches only the apps that are missing (reusing the ones already running)
 4. Optionally (with `--close-others`) closes any window that isn't part of the session
-5. Waits for any newly-launched apps to open
+5. Waits for any newly-launched apps to open (Firefox windows it launches reopen their saved tabs)
 6. Moves and resizes every window — reused and new — to its saved position
 
 ---
