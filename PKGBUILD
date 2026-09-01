@@ -11,7 +11,7 @@ optdepends=('gnome-shell>=45: for the GNOME backend (also needs the bundled shel
             'sway: for the Sway backend (uses swaymsg; no extension needed)')
 makedepends=('python-hatchling' 'python-build' 'python-installer')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('adf2bd4fbe9c03b60ce1a548a92649b3d3166b92a823153fb8a50f709c795506')
+sha256sums=('12c2b3e860a42a2d31659831cd5b8ec04f8fbcdc020efd83644cd972864b60ea')
 
 build() {
     cd "$pkgname-$pkgver"

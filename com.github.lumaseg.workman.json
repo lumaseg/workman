@@ -84,8 +84,8 @@
                 {
                     "type": "git",
                     "url": "https://github.com/lumaseg/workman.git",
-                    "tag": "v0.1.1",
-                    "commit": "fdefef75c1de62c0e591f362732687be7567726a"
+                    "tag": "v0.2.0",
+                    "commit": "ecbf8bc514558c1a306754dbfec500f823eb5dce"
                 }
             ]
         }
