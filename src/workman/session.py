@@ -1,124 +1,49 @@
+"""Session orchestration.
+
+Everything here is compositor-independent. Resolving an executable from a pid,
+relaunching Flatpaks, reopening a browser's tabs, and deciding which apps to
+reuse rather than launch work identically everywhere; only enumerating,
+placing and closing windows differ, and those live behind the `Backend`
+interface in `workman.backends`.
+"""
+
 import json
 import os
 import subprocess
 import time
-from pathlib import Path
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
 
-from workman import browsers
+from workman import appmatch, browsers
+from workman.backends import detect
+from workman.errors import UnsupportedDesktopError, WorkmanError  # noqa: F401
 
 IN_FLATPAK = os.path.exists("/.flatpak-info")
 
 SESSIONS_DIR = Path.home() / ".local" / "share" / "workman" / "sessions"
 
-EXTENSION_MISSING_MSG = (
-    "The Workman GNOME Shell extension isn't running.\n"
-    "Install it (see README), then run:\n"
-    "    gnome-extensions enable workman@workman\n"
-    "and log out and back in."
-)
+# v1 was a bare JSON array of GNOME windows. v2 wraps the payload so the
+# backend that captured it is known before anything is replayed.
+SESSION_VERSION = 2
 
-
-class WorkmanError(Exception):
-    pass
-
-
-def _check_supported_session():
-    desktop = os.environ.get('XDG_CURRENT_DESKTOP', '')
-    session_type = os.environ.get('XDG_SESSION_TYPE', '')
-    is_gnome = 'GNOME' in desktop.upper()
-    is_wayland = session_type.lower() == 'wayland' if session_type else True
-    if is_gnome and is_wayland:
-        return
-    raise WorkmanError(
-        "This version of Workman supports GNOME on Wayland only.\n"
-        f"  Detected desktop: {desktop or 'unknown'}\n"
-        f"  Detected session: {session_type or 'unknown'}\n"
-        "Support for KDE, XFCE, and wlroots-based compositors is "
-        "planned for future versions."
-    )
+# How long to wait for a launched app to map its window, and how often to look.
+# Generous because slow starters (VS Code, JetBrains IDEs) routinely exceed the
+# five-second sleep this replaced; the wait exits as soon as it is satisfied.
+WAIT_TIMEOUT = 20.0
+WAIT_INTERVAL = 0.4
 
 
 def ensure_sessions_dir():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-def get_open_windows():
-    result = subprocess.run([
-        'gdbus', 'call',
-        '--session',
-        '--dest', 'org.workman.WindowManager',
-        '--object-path', '/org/workman/WindowManager',
-        '--method', 'org.workman.WindowManager.GetWindows'
-    ], capture_output=True, text=True)
-
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        if 'ServiceUnknown' in stderr:
-            raise WorkmanError(EXTENSION_MISSING_MSG)
-        raise WorkmanError(f"Failed to query GNOME Shell: {stderr}")
-
-    output = result.stdout.strip()
-    try:
-        json_str = output[2:output.rfind("',)")]
-        return json.loads(json_str)
-    except (ValueError, json.JSONDecodeError) as e:
-        raise WorkmanError(
-            f"Could not parse GNOME Shell response: {e}\nRaw output: {output}"
-        )
-
-def move_window(wm_class, index, x, y, width, height, retries=5, delay=1):
-    """Move a window using the GNOME extension with retry logic."""
-    for attempt in range(retries):
-        cmd = [
-            'gdbus', 'call',
-            '--session',
-            '--dest', 'org.workman.WindowManager',
-            '--object-path', '/org/workman/WindowManager',
-            '--method', 'org.workman.WindowManager.MoveWindow',
-            wm_class,
-            str(index),
-            str(x),
-            str(y),
-            str(width),
-            str(height)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if '(true,)' in result.stdout:
-            return True
-        if 'ServiceUnknown' in result.stderr:
-            raise WorkmanError(EXTENSION_MISSING_MSG)
-        print(f"  Retry {attempt + 1}/{retries} for {wm_class}[{index}]...")
-        time.sleep(delay)
-    return False
-
-def close_window(window_id):
-    """Gracefully close a window by its stable id via the GNOME extension."""
-    cmd = [
-        'gdbus', 'call',
-        '--session',
-        '--dest', 'org.workman.WindowManager',
-        '--object-path', '/org/workman/WindowManager',
-        '--method', 'org.workman.WindowManager.CloseWindow',
-        str(window_id)
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if '(true,)' in result.stdout:
-        return True
-    if 'ServiceUnknown' in result.stderr:
-        raise WorkmanError(EXTENSION_MISSING_MSG)
-    if 'UnknownMethod' in result.stderr:
-        raise WorkmanError(
-            "The installed Workman extension is too old to close windows.\n"
-            "Reinstall it (see README) and log out and back in:\n"
-            "    ./scripts/install-extension.sh"
-        )
-    return False
 
 def get_exe_from_pid(pid):
     try:
         return os.readlink(f"/proc/{pid}/exe")
     except:
         return None
+
 
 def get_flatpak_id(pid):
     """Return the Flatpak application id for a process, or None.
@@ -138,16 +63,17 @@ def get_flatpak_id(pid):
         return None
     return None
 
-def _attach_browser_urls(windows):
+
+def _attach_browser_urls(windows, app_key):
     """Record each browser window's open tabs so restore can reopen them.
 
-    Best-effort and read-only: the GNOME windows and the browser's own
+    Best-effort and read-only: the compositor's windows and the browser's own
     session-store window list are correlated by order (geometry-to-window
     correlation isn't reliable), and any failure leaves windows without a
     `urls` key — restore simply launches them without tabs. Older sessions
     saved before this feature have no `urls` key and stay valid.
     """
-    firefox_windows = [w for w in windows if browsers.is_firefox(w.get('wm_class'))]
+    firefox_windows = [w for w in windows if browsers.is_firefox(app_key(w))]
     if not firefox_windows:
         return
     try:
@@ -166,15 +92,18 @@ def _attach_browser_urls(windows):
 
 
 def save_session(name):
-    _check_supported_session()
+    backend = detect()
     ensure_sessions_dir()
-    windows = get_open_windows()
-    
-    class_counts = defaultdict(int)
+    payload = backend.capture()
+    windows = payload.get('windows', [])
+
+    # The Nth window of a given app, in enumeration order. This is what lets
+    # restore tell two windows of the same app apart when nothing else can.
+    app_counts = defaultdict(int)
     for window in windows:
-        wm_class = window.get('wm_class', '')
-        window['class_index'] = class_counts[wm_class]
-        class_counts[wm_class] += 1
+        key = backend.app_key(window)
+        window['app_index'] = app_counts[key]
+        app_counts[key] += 1
         pid = window.get('pid')
         if pid:
             window['exe'] = get_exe_from_pid(pid)
@@ -182,129 +111,249 @@ def save_session(name):
             if flatpak_id:
                 window['flatpak'] = flatpak_id
 
-    _attach_browser_urls(windows)
+    _attach_browser_urls(windows, backend.app_key)
+    _warn_about_ambiguity(app_counts)
 
     session_file = SESSIONS_DIR / f"{name}.json"
     with open(session_file, 'w') as f:
-        json.dump(windows, f, indent=2)
-    print(f"Session '{name}' saved with {len(windows)} windows.")
+        json.dump({
+            'version': SESSION_VERSION,
+            'backend': backend.name,
+            'created': datetime.now().astimezone().isoformat(timespec='seconds'),
+            'data': payload,
+        }, f, indent=2)
+    print(f"Session '{name}' saved with {len(windows)} windows "
+          f"({backend.name} backend).")
 
-def restore_session(name, close_others=False):
-    _check_supported_session()
-    session_file = SESSIONS_DIR / f"{name}.json"
-    if not session_file.exists():
-        print(f"Session '{name}' not found.")
-        return
-    with open(session_file, 'r') as f:
-        windows = json.load(f)
 
-    # Look at what's already on screen so we can reuse running apps instead of
-    # relaunching them. This also fails fast with a clear message if the
-    # extension isn't available (we'd be unable to move windows either way).
-    current_windows = get_open_windows()
-    open_counts = defaultdict(int)
+def _warn_about_ambiguity(app_counts):
+    """Flag apps with several windows, which restore can only place approximately.
+
+    Two windows of the same app are told apart by title first and enumeration
+    order second. Titles change (switching a browser tab rewrites one), and a
+    single process often owns many windows, so a relaunch may produce fewer
+    windows than were saved. Saying so at save time beats a silently wrong
+    restore later.
+    """
+    ambiguous = sorted(key for key, count in app_counts.items() if count > 1 and key)
+    if ambiguous:
+        print("Note: multiple windows share an app id (" +
+              ", ".join(ambiguous) + ").")
+        print("      Restore matches them by title, then by order — which can "
+              "differ if titles changed.")
+
+
+def _load_session(path, backend):
+    """Read a session file, normalising v1 files and rejecting foreign ones."""
+    with open(path, 'r') as f:
+        raw = json.load(f)
+
+    if isinstance(raw, list):
+        # v1: a bare array of GNOME windows, written before session files
+        # recorded which backend produced them.
+        version, saved_backend, payload = 1, 'gnome', {'windows': raw}
+    else:
+        version = raw.get('version', 1)
+        saved_backend = raw.get('backend', 'gnome')
+        payload = raw.get('data') or {}
+
+    if version > SESSION_VERSION:
+        raise WorkmanError(
+            f"This session file is version {version}, but this Workman "
+            f"understands up to version {SESSION_VERSION}. Upgrade Workman."
+        )
+    if saved_backend != backend.name:
+        raise WorkmanError(
+            f"Session '{path.stem}' was captured on the '{saved_backend}' "
+            f"backend, but this machine is running '{backend.name}'.\n"
+            "Layouts aren't portable between compositors — save a new session "
+            "here instead."
+        )
+    return payload
+
+
+def _close_others(backend, current_windows, target_by_key, dry_run):
+    """Close anything open that this session doesn't need.
+
+    Keep the first N windows of each app the session wants (those get reused
+    and repositioned) and close the rest, plus every window of an app the
+    session doesn't mention. Windows without an app key belong to the desktop
+    or the shell itself and are never touched.
+    """
+    keep_remaining = {key: len(wins) for key, wins in target_by_key.items()}
+    to_close = []
     for window in current_windows:
-        open_counts[window.get('wm_class', '')] += 1
-
-    # Group the target windows by app. The first N instances of each app are
-    # assumed to be covered by windows already open; only the remainder need
-    # launching.
-    target_by_class = defaultdict(list)
-    for window in windows:
-        target_by_class[window.get('wm_class', '')].append(window)
-
-    # With --close-others, anything open that the session doesn't need is shut.
-    # Keep the first N windows of each app (those get reused/repositioned) and
-    # close the rest, plus every window of an app not in the session at all.
-    # Windows without a wm_class (desktop/shell components) are never touched.
-    if close_others:
-        keep_remaining = {cls: len(wins) for cls, wins in target_by_class.items()}
-        to_close = []
-        for window in current_windows:
-            wm_class = window.get('wm_class', '')
-            if not wm_class:
+        key = backend.app_key(window)
+        if not key:
+            continue
+        # Which app in the session does this window satisfy? Tightest match
+        # wins, so an exactly-named window is never consumed on behalf of a
+        # loosely-matching one. Counting strictly here would close a window the
+        # session is about to reuse under a different packaging id.
+        claimed, best_tier = None, None
+        for target_key, remaining in keep_remaining.items():
+            if remaining <= 0:
                 continue
-            if keep_remaining.get(wm_class, 0) > 0:
-                keep_remaining[wm_class] -= 1
-            else:
-                to_close.append(window)
-        if to_close:
-            print(f"Closing {len(to_close)} window(s) not in this session...")
-            for window in to_close:
-                window_id = window.get('id')
-                label = window.get('wm_class') or window.get('title') or 'window'
-                if window_id is None:
-                    print(f"  Skipped {label} (update the extension to enable closing)")
-                    continue
-                if close_window(window_id):
-                    print(f"  Closed {label}")
-                else:
-                    print(f"  Could not close {label}")
+            tier = appmatch.match_tier(key, target_key)
+            if tier is not None and (best_tier is None or tier < best_tier):
+                claimed, best_tier = target_key, tier
+        if claimed is not None:
+            keep_remaining[claimed] -= 1
+        else:
+            to_close.append(window)
+    if not to_close:
+        return
+    print(f"Closing {len(to_close)} window(s) not in this session...")
+    for window in to_close:
+        label = backend.app_key(window) or window.get('title') or 'window'
+        if dry_run:
+            print(f"  Would close {label}")
+            continue
+        if backend.close_window(window):
+            print(f"  Closed {label}")
+        else:
+            print(f"  Could not close {label}")
 
+
+def _launch_command(window, app_key):
+    """Build the command that reopens one window, or None if it can't be."""
+    flatpak_id = window.get('flatpak')
+    exe = window.get('exe')
+    # Flatpak apps must be relaunched via `flatpak run <id>`; their saved exe
+    # is an in-sandbox path that doesn't exist on the host.
+    if flatpak_id:
+        cmd, label = ['flatpak', 'run', flatpak_id], f"flatpak run {flatpak_id}"
+    elif exe:
+        cmd, label = [exe], exe
+    else:
+        return None, None
+    # Reopen a browser window's saved tabs: the first URL gets the new window,
+    # the rest open as tabs in it. Only windows we launch get their tabs back;
+    # reused already-open windows keep what they have.
+    urls = window.get('urls')
+    if urls and browsers.is_firefox(app_key):
+        cmd = cmd + ['--new-window', urls[0]]
+        for url in urls[1:]:
+            cmd += ['--new-tab', url]
+        label += f" (+{len(urls)} tab(s))"
+    if IN_FLATPAK:
+        cmd = ["flatpak-spawn", "--host", *cmd]
+    return cmd, label
+
+
+def _launch_missing(backend, target_by_key, open_counts, dry_run):
+    """Launch only the apps that aren't already running.
+
+    Returns ``{app_key: [Popen, ...]}`` for what was actually started, which
+    lets the caller tell "still starting up" from "will never open another
+    window" while waiting.
+    """
     print("Launching missing apps...")
-    launched_any = False
+    launched = defaultdict(list)
     reused_any = False
-    for wm_class, target_windows in target_by_class.items():
-        already_open = open_counts.get(wm_class, 0)
+    for key, target_windows in target_by_key.items():
+        already_open = open_counts.get(key, 0)
         if already_open:
             reused = min(already_open, len(target_windows))
-            print(f"  Reusing {reused} already-open {wm_class or 'window'}")
+            print(f"  Reusing {reused} already-open {key or 'window'}")
             reused_any = True
         for window in target_windows[already_open:]:
-            flatpak_id = window.get('flatpak')
-            exe = window.get('exe')
-            # Flatpak apps must be relaunched via `flatpak run <id>`; their
-            # saved exe is an in-sandbox path that doesn't exist on the host.
-            if flatpak_id:
-                cmd, label = ['flatpak', 'run', flatpak_id], f"flatpak run {flatpak_id}"
-            elif exe:
-                cmd, label = [exe], exe
-            else:
+            cmd, label = _launch_command(window, key)
+            if cmd is None:
                 continue
-            # Reopen a browser window's saved tabs: the first URL gets the new
-            # window, the rest open as tabs in it. Only windows we launch get
-            # their tabs back; reused already-open windows keep what they have.
-            urls = window.get('urls')
-            if urls and browsers.is_firefox(wm_class):
-                cmd = cmd + ['--new-window', urls[0]]
-                for url in urls[1:]:
-                    cmd += ['--new-tab', url]
-                label += f" (+{len(urls)} tab(s))"
-            if IN_FLATPAK:
-                cmd = ["flatpak-spawn", "--host", *cmd]
+            if dry_run:
+                print(f"  Would launch {label}")
+                continue
             try:
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                launched_any = True
+                launched[key].append(subprocess.Popen(
+                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
                 print(f"  Launched {label}")
             except Exception as e:
                 print(f"  Could not launch {label}: {e}")
 
-    if launched_any:
-        print("Waiting for apps to open...")
-        time.sleep(5)
-    elif reused_any:
+    if not launched and reused_any:
         print("All required apps already open; repositioning...")
+    return launched
+
+
+def _wait_for_windows(backend, target_by_key, launched,
+                      timeout=WAIT_TIMEOUT, interval=WAIT_INTERVAL):
+    """Wait for the apps just launched to put their windows on screen.
+
+    Polling beats the fixed five-second sleep this replaces in both directions:
+    a session of quick apps stops waiting the moment they appear, and a slow
+    starter like VS Code gets far longer than five seconds instead of being
+    reported missing on a restore that would have worked a moment later.
+
+    An app stops being waited on once every process launched for it has already
+    exited without adding a window. That is the normal outcome when one process
+    owns several windows — relaunching a browser hands off to the running
+    instance and quits — and without it every such session would stall for the
+    full timeout.
+    """
+    print("Waiting for apps to open...")
+    deadline = time.monotonic() + timeout
+    pending = set(launched)
+    while pending:
+        counts = defaultdict(int)
+        for window in backend.list_windows():
+            counts[backend.app_key(window)] += 1
+        for key in list(pending):
+            if counts.get(key, 0) >= len(target_by_key.get(key, ())):
+                pending.discard(key)
+            elif all(process.poll() is not None for process in launched[key]):
+                pending.discard(key)
+        if not pending or time.monotonic() >= deadline:
+            break
+        time.sleep(interval)
+
+
+def restore_session(name, close_others=False, dry_run=False):
+    backend = detect()
+    session_file = SESSIONS_DIR / f"{name}.json"
+    if not session_file.exists():
+        print(f"Session '{name}' not found.")
+        return
+    payload = _load_session(session_file, backend)
+    windows = payload.get('windows', [])
+
+    # Look at what's already on screen so we can reuse running apps instead of
+    # relaunching them. This also fails fast with a clear message if the
+    # compositor is unreachable (we'd be unable to move windows either way).
+    current_windows = backend.list_windows()
+
+    # Group the target windows by app. The first N instances of each app are
+    # assumed to be covered by windows already open; only the remainder need
+    # launching.
+    target_by_key = defaultdict(list)
+    for window in windows:
+        target_by_key[backend.app_key(window)].append(window)
+
+    # Count what's already open per app, tolerating packaging-variant
+    # differences exactly as placement does. Counting strictly here would undo
+    # that tolerance: a session recording `org.mozilla.firefox` would see zero
+    # native `firefox` windows open, launch a duplicate, and only then place
+    # one of them.
+    open_counts = {
+        key: len(appmatch.best_matches(key, current_windows, backend.app_key))
+        for key in target_by_key
+    }
+
+    if close_others:
+        _close_others(backend, current_windows, target_by_key, dry_run)
+
+    launched = _launch_missing(backend, target_by_key, open_counts, dry_run)
+    if launched:
+        _wait_for_windows(backend, target_by_key, launched)
 
     print("Restoring window positions...")
-    for window in windows:
-        wm_class = window.get('wm_class')
-        index = window.get('class_index', 0)
-        if not wm_class:
-            continue
-        success = move_window(
-            wm_class,
-            index,
-            window['x'],
-            window['y'],
-            window['width'],
-            window['height']
-        )
-        if success:
-            print(f"  Moved {wm_class}[{index}] to {window['x']},{window['y']} {window['width']}x{window['height']}")
-        else:
-            print(f"  Could not move {wm_class}[{index}] after retries")
+    backend.place(payload, dry_run=dry_run)
 
-    print(f"Session '{name}' restored.")
+    if dry_run:
+        print("Dry run complete — nothing was changed.")
+    else:
+        print(f"Session '{name}' restored.")
+
 
 def list_sessions():
     ensure_sessions_dir()
@@ -315,6 +364,7 @@ def list_sessions():
     print("Saved sessions:")
     for session in sessions:
         print(f"  - {session.stem}")
+
 
 def delete_session(name):
     session_file = SESSIONS_DIR / f"{name}.json"

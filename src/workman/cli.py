@@ -24,6 +24,11 @@ def main():
         action='store_true',
         help='Close apps that are open but not part of this session'
     )
+    restore_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Print what would be done without changing anything'
+    )
 
     subparsers.add_parser('list', help='List all saved sessions')
 
@@ -36,7 +41,11 @@ def main():
         if args.command == 'save':
             session.save_session(args.name)
         elif args.command == 'restore':
-            session.restore_session(args.name, close_others=args.close_others)
+            session.restore_session(
+                args.name,
+                close_others=args.close_others,
+                dry_run=args.dry_run,
+            )
         elif args.command == 'list':
             session.list_sessions()
         elif args.command == 'delete':
