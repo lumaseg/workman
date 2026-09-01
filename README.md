@@ -79,6 +79,19 @@ pip install -e .
 ./scripts/install-extension.sh
 ```
 
+### Check it works (GNOME only)
+
+Once the extension is loaded, this exercises the whole GNOME path against your
+real shell — including whether windows actually move — and puts every window
+back where it found it:
+
+```bash
+python3 scripts/verify-gnome.py
+```
+
+It launches nothing and closes nothing. Add `--close-others` to also test
+window closing, which does open and close one throwaway window.
+
 ### Activate the extension (GNOME only)
 
 After installing, **log out and back in** so GNOME Shell loads the extension. (On Wayland you can't restart the shell in place.) Then verify:
