@@ -25,6 +25,16 @@ Requirements: `python3` with the `build` and `installer` modules, plus
 `.rpm` target additionally needs `rpmbuild` (Arch: `pacman -S rpm-tools`,
 Debian/Ubuntu: `apt install rpm`, Fedora: `dnf install rpm-build`).
 
+Two things bite on a modern Arch box:
+
+- A user-installed gem is not on `PATH` by default. Add
+  `$(ruby -e 'puts Gem.user_dir')/bin` to it.
+- Ruby 3.4 removed `erb`, `observer` and `base64` from its default gems, so
+  `fpm` installs happily and then dies on `require 'erb'`. Fix with
+  `gem install --user-install erb observer base64`. `release.sh` only checks
+  that the `fpm` binary exists, so it will not catch this — run `fpm --version`
+  once before starting a release.
+
 ```bash
 packaging/build-packages.sh          # both .deb and .rpm
 packaging/build-packages.sh deb      # just the .deb
@@ -65,6 +75,40 @@ git checkout vX.Y.Z
 packaging/build-packages.sh
 gh release upload vX.Y.Z dist-packages/*
 ```
+
+### If a release stops partway
+
+`release.sh` phase 0 refuses to run once the tag exists, so it cannot resume.
+Finish the remaining phases by hand from the **tagged** tree:
+
+```bash
+packaging/build-packages.sh
+gh auth switch --user lumaseg
+gh release create vX.Y.Z dist-packages/* --title vX.Y.Z --notes "…"
+gh auth switch --user <personal account>
+```
+
+and then the AUR:
+
+```bash
+AURDIR=$(mktemp -d)/aur-workman
+git clone ssh://aur@aur.archlinux.org/workman.git "$AURDIR" && cd "$AURDIR"
+git config --local user.name lumaseg && git config --local user.email lumaseg@proton.me
+cp /path/to/repo/PKGBUILD PKGBUILD
+makepkg --printsrcinfo > .SRCINFO
+makepkg -f                 # build it before publishing: verifies the sha256
+                           # and the whole recipe against the published tarball
+git add PKGBUILD .SRCINFO && git diff --cached
+git commit -m "Update to X.Y.Z"
+git log -1 --format='%ae'  # must be lumaseg@proton.me
+git push origin master     # the AUR branch is master, not main
+```
+
+**Check the AUR SSH identity first.** Without a `Host aur.archlinux.org` block
+in `~/.ssh/config` pinning the lumaseg key with `IdentitiesOnly yes`, SSH falls
+back to the default key — which on a machine with a personal GitHub account is
+the wrong identity entirely. `release.sh` phase 0 asserts the *GitHub* SSH
+identity but not the AUR one.
 
 Either way, users then install the downloaded file:
    - **Ubuntu/Debian:** `sudo apt install ./workman_X.Y.Z_all.deb`

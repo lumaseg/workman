@@ -27,6 +27,18 @@ Workman picks the backend by asking the compositor, not by reading
 `XDG_CURRENT_DESKTOP` — so it works when Sway is started from a TTY and that
 variable is never set.
 
+### Upgrading from 0.1.x
+
+**GNOME Shell 42–44 is no longer supported.** Workman 0.1.x shipped a second
+extension variant for those versions and picked between them at install time;
+0.2.0 ships one extension for GNOME 45+ only. If you are on GNOME 42–44
+(Ubuntu 22.04, for instance), stay on 0.1.4 — 0.2.0 will install an extension
+your shell cannot load.
+
+Sessions saved by 0.1.x still restore on 0.2.0. Sessions are not portable
+between compositors, though: one saved under GNOME cannot be replayed on Sway,
+and Workman says so rather than restoring something wrong.
+
 ---
 
 ## Installation
