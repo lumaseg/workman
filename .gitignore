@@ -10,3 +10,5 @@ build/
 build-dir/
 .flatpak-builder/
 WORKMAN_BUILD_PROGRESS.md
+SWAY_BACKEND_PLAN.md
+SWAY_PARITY_PLAN.md
