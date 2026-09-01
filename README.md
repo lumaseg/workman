@@ -16,9 +16,16 @@ You can save as many named sessions as you like. Switch between a "work" layout,
 
 ## Requirements
 
-- **Linux** with GNOME on **Wayland**
-- **GNOME Shell 42 or newer** (Ubuntu 22.04 LTS and up, Fedora 36+, Arch rolling)
+- **Linux** on **Wayland**, with one of:
+  - **GNOME Shell 42 or newer** (Ubuntu 22.04 LTS and up, Fedora 36+, Arch
+    rolling) — plus the bundled GNOME Shell extension
+  - **Sway** (or another i3-compatible wlroots compositor) — nothing extra to
+    install; Workman talks to `swaymsg` directly
 - **Python 3.8+**
+
+Workman picks the backend by asking the compositor, not by reading
+`XDG_CURRENT_DESKTOP` — so it works when Sway is started from a TTY and that
+variable is never set.
 
 ---
 
@@ -29,8 +36,8 @@ distribution packages below install **both** in one step and pick the correct
 extension variant for your GNOME version automatically; installing from source
 installs them separately.
 
-After any method, you must **log out and back in** once (see
-[Activate the extension](#activate-the-extension)).
+**On Sway the extension is irrelevant** — install the CLI and you're done.
+The extension step and the log-out step below apply to GNOME only.
 
 ### Arch Linux (AUR)
 
@@ -67,13 +74,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 
-# 2. Install the GNOME Shell extension into your user extensions dir.
+# 2. GNOME only — install the Shell extension into your user extensions dir.
 # The script picks the modern (GNOME 45+) or legacy (GNOME 42-44) variant
-# based on the running GNOME Shell.
+# based on the running GNOME Shell. Skip this entirely on Sway.
 ./scripts/install-extension.sh
 ```
 
-### Activate the extension
+### Activate the extension (GNOME only)
 
 After installing, **log out and back in** so GNOME Shell loads the extension. (On Wayland you can't restart the shell in place.) Then verify:
 
@@ -139,12 +146,22 @@ workman restore mysession --close-others
 Any window that isn't part of the session is closed (apps the session needs are
 kept and repositioned as usual). Closing is graceful — it's the same as clicking
 an app's close button, so anything with unsaved work still gets its
-"save changes?" prompt. Windows that belong to the desktop or GNOME Shell itself
+"save changes?" prompt. Windows that belong to the desktop or the shell itself
 are never touched.
 
-> **Note:** `--close-others` needs the updated GNOME Shell extension. If you
-> installed Workman before this feature, reinstall the extension
+> **Note (GNOME):** `--close-others` needs the updated GNOME Shell extension. If
+> you installed Workman before this feature, reinstall the extension
 > (`./scripts/install-extension.sh`) and log out and back in.
+
+#### See what a restore would do first
+
+`--dry-run` prints every step — which apps would be launched and, on Sway, the
+exact compositor commands that would rebuild the layout — without changing
+anything:
+
+```bash
+workman restore mysession --dry-run
+```
 
 ### List all saved sessions
 ```bash
@@ -180,11 +197,17 @@ workman save work
 
 ## How it works
 
-Workman uses a GNOME Shell extension to communicate with the desktop environment directly via DBus — the standard Linux inter-process communication system. This is the proper Wayland-native approach, meaning it works correctly on modern GNOME systems without relying on legacy X11 tools.
+Workman speaks to the compositor natively rather than through legacy X11 tools
+(`wmctrl`, `xdotool` and friends return nothing under Wayland). Which route it
+takes depends on what's running:
+
+- **GNOME** — a small Shell extension exposes the open windows over DBus, since
+  GNOME offers no other Wayland-native way to move a window.
+- **Sway** — `swaymsg` already exposes everything, so there's nothing to install.
 
 When you save a session, Workman:
-1. Asks the GNOME extension for a list of all open windows
-2. Records each window's app, position, size and title
+1. Asks the compositor for the open windows
+2. Records each window's app, title, and how it is laid out (see below)
 3. Reads Firefox's session store to record the tabs open in each Firefox window
 4. Saves everything to a JSON file in `~/.local/share/workman/sessions/`
 
@@ -194,26 +217,53 @@ When you restore a session, Workman:
 3. Launches only the apps that are missing (reusing the ones already running)
 4. Optionally (with `--close-others`) closes any window that isn't part of the session
 5. Waits for any newly-launched apps to open (Firefox windows it launches reopen their saved tabs)
-6. Moves and resizes every window — reused and new — to its saved position
+6. Puts every window — reused and new — back where it was
+
+### What "where it was" means
+
+On **GNOME**, which is a floating window manager, a window is fully described
+by its position and size, so that's what gets saved and replayed.
+
+**Sway is a tiling compositor**, where geometry is a *result* of the layout
+rather than an input to it — setting a tiled window's coordinates does nothing.
+So on Sway, Workman saves the layout itself: which output each workspace lives
+on, the workspace's split orientation, and how containers are nested inside it.
+Restoring rebuilds that tree. Floating windows are the exception — those really
+are described by their geometry, and are restored to their exact position and
+size.
 
 ---
 
 ## Known limitations
 
-- **Wayland only** — Workman is designed for GNOME on Wayland. X11 sessions are not supported.
-- **GNOME only** — other desktop environments (KDE, XFCE etc.) are not currently supported.
-- **App startup time** — some apps (like VS Code) take longer to load. Workman retries window positioning automatically to account for this.
-- **Special windows** — dropdown terminals like Yakuake may not restore correctly due to how GNOME handles them.
-- **Session files** — sessions are stored as plain JSON in `~/.local/share/workman/sessions/` and can be edited manually if needed.
+- **Wayland only** — X11 sessions are not supported.
+- **GNOME and Sway** — other desktops (KDE, XFCE) are not supported yet.
+- **Sessions aren't portable between compositors** — a layout saved on GNOME
+  can't be replayed on Sway, or vice versa. Workman says so rather than
+  restoring something wrong.
+- **One app, many windows** — several windows of the same app (three browser
+  windows, say) are usually a single process, so relaunching it may open fewer
+  windows than were saved. Workman warns at save time when a session contains
+  apps it may not be able to tell apart on restore, and matches them by window
+  title first and by order second — neither of which is guaranteed, since a
+  browser's title changes with its tab.
+- **App startup time** — some apps (like VS Code) take longer to load. On
+  GNOME, Workman retries positioning each window. On Sway it waits five
+  seconds after launching and then places whatever has appeared; an app slower
+  than that is reported as `No window found for …` and left where it opened,
+  and running `workman restore` a second time will place it.
+- **Special windows** — dropdown terminals like Yakuake may not restore
+  correctly due to how compositors handle them.
+- **Session files** — sessions are stored as plain JSON in
+  `~/.local/share/workman/sessions/` and can be edited manually if needed.
 
 ---
 
 ## Roadmap
 
-- Save and restore open browser tabs/websites as part of a session
 - GUI for managing sessions
 - Auto-save session on logout
-- Support for multiple monitors
+- Hyprland and river support (both wlroots, so much of the Sway backend applies)
 - KDE Plasma support
 
 ---
