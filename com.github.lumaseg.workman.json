@@ -22,8 +22,7 @@
                 "pip3 install --prefix=/app --no-index --find-links=. packaging-24.2.tar.gz",
                 "pip3 install --prefix=/app --no-index --find-links=. calver-2025.10.20.tar.gz",
                 "pip3 install --prefix=/app --no-index --find-links=. trove_classifiers-2026.1.14.14.tar.gz",
-                "pip3 install --prefix=/app --no-index --find-links=. hatchling-1.29.0.tar.gz",
-                "pip3 install --prefix=/app --no-index --find-links=. pyxdg-0.28.tar.gz"
+                "pip3 install --prefix=/app --no-index --find-links=. hatchling-1.29.0.tar.gz"
             ],
             "sources": [
                 {
@@ -70,11 +69,6 @@
                     "type": "file",
                     "url": "https://files.pythonhosted.org/packages/source/h/hatchling/hatchling-1.29.0.tar.gz",
                     "sha256": "793c31816d952cee405b83488ce001c719f325d9cda69f1fc4cd750527640ea6"
-                },
-                {
-                    "type": "file",
-                    "url": "https://files.pythonhosted.org/packages/source/p/pyxdg/pyxdg-0.28.tar.gz",
-                    "sha256": "3267bb3074e934df202af2ee0868575484108581e6f3cb006af1da35395e88b4"
                 }
             ]
         },

@@ -83,7 +83,7 @@ for t in $TARGETS; do
     case "$t" in
         deb)
             fpm "${COMMON[@]}" -t deb -a all -f \
-                --depends python3 --depends python3-xdg \
+                --depends python3 \
                 --deb-recommends gnome-shell \
                 --deb-interest-noawait /usr/bin/gnome-shell \
                 -p "$OUTDIR/workman_${VERSION}_all.deb" \
@@ -91,7 +91,7 @@ for t in $TARGETS; do
             ;;
         rpm)
             fpm "${COMMON[@]}" -t rpm -a noarch -f \
-                --depends python3 --depends python3-pyxdg \
+                --depends python3 \
                 --rpm-tag "Recommends: gnome-shell" \
                 -p "$OUTDIR/workman-${VERSION}-1.noarch.rpm" \
                 -C "$STAGE" usr

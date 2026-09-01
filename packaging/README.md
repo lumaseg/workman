@@ -42,8 +42,9 @@ The packages are architecture-independent (pure Python + JS). The Python module
 and its `.dist-info` install to a private `/usr/lib/workman/`; a
 `/usr/bin/workman` launcher puts that on `PYTHONPATH`, so `import workman` and
 `workman --version` work regardless of the target distro's Python minor
-version. The `pyxdg` dependency is satisfied by the distro package
-(`python3-xdg` on Debian/Ubuntu, `python3-pyxdg` on Fedora).
+version. Workman has no third-party Python dependencies; each backend
+talks to its compositor through a command already present on the system
+(`gdbus` for GNOME, `swaymsg` for Sway).
 
 ## Release process
 
@@ -71,10 +72,10 @@ gh release upload vX.Y.Z dist-packages/*
 
 Either way, users then install the downloaded file:
    - **Ubuntu/Debian:** `sudo apt install ./workman_X.Y.Z_all.deb`
-     (`apt install ./file.deb` resolves `python3-xdg` / recommends `gnome-shell`
+     (`apt install ./file.deb` resolves the recommended `gnome-shell`
      from the archive).
    - **Fedora:** `sudo dnf install ./workman-X.Y.Z-1.noarch.rpm`
-     (pulls `python3-pyxdg`; recommends `gnome-shell`).
+     (recommends `gnome-shell`).
 
 There is no auto-update at Phase 1 — users re-download newer releases. Phase 2
 (OBS) is what adds `apt upgrade` / `dnf upgrade` support.

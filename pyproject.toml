@@ -8,7 +8,7 @@ version = "0.1.4"
 description = "Save and restore your desktop sessions"
 authors = [{name = "lumaseg"}]
 requires-python = ">=3.8"
-dependencies = ["pyxdg"]
+dependencies = []
 
 [project.scripts]
 workman = "workman.cli:main"
