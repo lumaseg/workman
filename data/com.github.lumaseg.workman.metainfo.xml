@@ -34,6 +34,11 @@
   </provides>
 
   <releases>
+    <release version="0.2.0" date="2026-09-01">
+      <description>
+        <p>Add Sway support alongside GNOME; save and restore Chromium browser tabs; require GNOME Shell 45 or newer</p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-06-18">
       <description>
         <p>Restore open Firefox tabs; fix Flatpak relaunch and tolerate wm_class differences on restore</p>
