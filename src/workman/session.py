@@ -64,31 +64,68 @@ def get_flatpak_id(pid):
     return None
 
 
+def _match_browser_windows(compositor_windows, browser_windows):
+    """Pair the compositor's browser windows with the browser's own window list.
+
+    Order alone is not enough: the compositor enumerates windows in stacking or
+    tree order while the browser lists them in its own internal order, and on a
+    three-window browser those disagree routinely. A window's title is the tab
+    currently showing, so the browser's title is a substring of the compositor's
+    ("Spotify - Web Player" inside "Spotify - Web Player - Brave"). Match on
+    that first, then fall back to order for whatever is left — a tab switched
+    since the browser last flushed its session store will not match by title.
+    """
+    pairs = {}
+    claimed = set()
+    for index, window in enumerate(compositor_windows):
+        title = (window.get('title') or '').strip()
+        if not title:
+            continue
+        for position, candidate in enumerate(browser_windows):
+            if position in claimed:
+                continue
+            candidate_title = (candidate.get('title') or '').strip()
+            if candidate_title and candidate_title in title:
+                pairs[index] = candidate
+                claimed.add(position)
+                break
+    spare = [w for position, w in enumerate(browser_windows)
+             if position not in claimed]
+    for index in range(len(compositor_windows)):
+        if index not in pairs and spare:
+            pairs[index] = spare.pop(0)
+    return pairs
+
+
 def _attach_browser_urls(windows, app_key):
     """Record each browser window's open tabs so restore can reopen them.
 
-    Best-effort and read-only: the compositor's windows and the browser's own
-    session-store window list are correlated by order (geometry-to-window
-    correlation isn't reliable), and any failure leaves windows without a
-    `urls` key — restore simply launches them without tabs. Older sessions
-    saved before this feature have no `urls` key and stay valid.
+    Best-effort and read-only: any failure leaves windows without a `urls` key
+    and restore simply launches them without tabs. Sessions saved before this
+    feature have no `urls` key and stay valid.
     """
-    firefox_windows = [w for w in windows if browsers.is_firefox(app_key(w))]
-    if not firefox_windows:
-        return
-    try:
-        url_windows = browsers.get_firefox_window_urls()
-    except Exception:
-        url_windows = []
-    if not url_windows:
-        return
-    captured = 0
-    for window, urls in zip(firefox_windows, url_windows):
-        window['urls'] = urls
-        captured += len(urls)
-    if captured:
-        print(f"Captured {captured} Firefox tab(s) across "
-              f"{min(len(firefox_windows), len(url_windows))} window(s).")
+    by_browser = defaultdict(list)
+    for window in windows:
+        key = app_key(window)
+        if browsers.is_browser(key):
+            by_browser[key].append(window)
+
+    for key, compositor_windows in by_browser.items():
+        try:
+            browser_windows = browsers.get_browser_windows(key)
+        except Exception:
+            browser_windows = []
+        if not browser_windows:
+            continue
+        pairs = _match_browser_windows(compositor_windows, browser_windows)
+        captured = 0
+        for index, browser_window in pairs.items():
+            urls = browser_window.get('urls') or []
+            if urls:
+                compositor_windows[index]['urls'] = urls
+                captured += len(urls)
+        if captured:
+            print(f"Captured {captured} {key} tab(s) across {len(pairs)} window(s).")
 
 
 def save_session(name):
@@ -227,14 +264,19 @@ def _launch_command(window, app_key):
         cmd, label = [exe], exe
     else:
         return None, None
-    # Reopen a browser window's saved tabs: the first URL gets the new window,
-    # the rest open as tabs in it. Only windows we launch get their tabs back;
-    # reused already-open windows keep what they have.
+    # Reopen a browser window's saved tabs. Only windows we launch get their
+    # tabs back; reused already-open windows keep what they have.
     urls = window.get('urls')
     if urls and browsers.is_firefox(app_key):
+        # Firefox wants each extra tab flagged individually.
         cmd = cmd + ['--new-window', urls[0]]
         for url in urls[1:]:
             cmd += ['--new-tab', url]
+        label += f" (+{len(urls)} tab(s))"
+    elif urls and browsers.is_chromium(app_key):
+        # Chromium takes them positionally: one new window, the rest as tabs
+        # in it. Verified against Brave, which opens a single window.
+        cmd = cmd + ['--new-window'] + list(urls)
         label += f" (+{len(urls)} tab(s))"
     if IN_FLATPAK:
         cmd = ["flatpak-spawn", "--host", *cmd]

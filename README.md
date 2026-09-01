@@ -117,20 +117,30 @@ workman save mysession
 
 Give your session any name you like — `work`, `dev`, `music`, `morning` — whatever makes sense to you.
 
-#### Firefox tabs
+#### Browser tabs
 
-When you save a session, Workman also records the tabs open in each **Firefox**
-window (read from Firefox's own session store on disk). Restoring the session
-reopens those tabs in a fresh Firefox window. This works out of the box — no
-add-on and no extra dependency.
+When you save a session, Workman also records the tabs open in each browser
+window, read from the browser's own session store on disk. Restoring reopens
+them. This works out of the box — no add-on and no extra dependency.
+
+Supported: **Firefox**, and the Chromium family — **Brave**, **Chrome**,
+**Chromium**, **Vivaldi** and **Edge**.
+
+This is what makes restoring from nothing work for browsers. One browser
+process usually owns several windows, so relaunching it once would otherwise
+give you a single window back; because Workman knows which URLs belonged to
+which window, it opens each one explicitly.
 
 A couple of things worth knowing:
 
-- Tabs are reopened only for Firefox windows that Workman **launches**. If
-  Firefox is already running and the window gets reused, its current tabs are
+- Tabs are reopened only for browser windows that Workman **launches**. If the
+  browser is already running and a window gets reused, its current tabs are
   left as they are.
-- Internal pages (`about:…`) are skipped, since they can't be reopened from the
-  command line.
+- Internal pages (`about:…`, `chrome://…`) are skipped, since they can't be
+  reopened from the command line.
+- Windows are matched to their tabs by title first and by order second — so a
+  tab switched since the browser last saved its session may pair a window with
+  the wrong set.
 
 > **Privacy:** the URLs you have open are written, in clear text, into the
 > session file under `~/.local/share/workman/sessions/`. Treat saved sessions as
@@ -220,7 +230,7 @@ takes depends on what's running:
 When you save a session, Workman:
 1. Asks the compositor for the open windows
 2. Records each window's app, title, and how it is laid out (see below)
-3. Reads Firefox's session store to record the tabs open in each Firefox window
+3. Reads each browser's session store to record the tabs open in every browser window
 4. Saves everything to a JSON file in `~/.local/share/workman/sessions/`
 
 When you restore a session, Workman:
@@ -228,7 +238,7 @@ When you restore a session, Workman:
 2. Checks which of the required apps are already open
 3. Launches only the apps that are missing (reusing the ones already running)
 4. Optionally (with `--close-others`) closes any window that isn't part of the session
-5. Waits for any newly-launched apps to open (Firefox windows it launches reopen their saved tabs)
+5. Waits for the newly-launched apps to open (browser windows it launches reopen their saved tabs)
 6. Puts every window — reused and new — back where it was
 
 ### What "where it was" means
@@ -253,12 +263,12 @@ size.
 - **Sessions aren't portable between compositors** — a layout saved on GNOME
   can't be replayed on Sway, or vice versa. Workman says so rather than
   restoring something wrong.
-- **One app, many windows** — several windows of the same app (three browser
-  windows, say) are usually a single process, so relaunching it may open fewer
-  windows than were saved. Workman warns at save time when a session contains
-  apps it may not be able to tell apart on restore, and matches them by window
-  title first and by order second — neither of which is guaranteed, since a
-  browser's title changes with its tab.
+- **One app, many windows** — several windows of the same app are usually a
+  single process, so relaunching it may open fewer windows than were saved.
+  Browsers are handled (each window is reopened explicitly with its own tabs);
+  other multi-window apps are not. Workman warns at save time when a session
+  contains apps it may not be able to tell apart on restore, and matches them
+  by window title first and by order second.
 - **App startup time** — some apps (like VS Code) take longer to load. On
   GNOME, Workman retries positioning each window. On Sway it waits five
   seconds after launching and then places whatever has appeared; an app slower
