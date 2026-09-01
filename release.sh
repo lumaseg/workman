@@ -26,6 +26,7 @@ AUR_URL="ssh://aur@aur.archlinux.org/workman.git"
 PSEUDO_NAME="lumaseg"
 PSEUDO_EMAIL="lumaseg@proton.me"
 META="data/com.github.lumaseg.workman.metainfo.xml"
+FLATPAK="com.github.lumaseg.workman.json"
 
 # ---- arg parsing -----------------------------------------------------------
 VERSION="" ; NOTES="" ; ASSUME_YES=0 ; SKIP_PACKAGES=0 ; SKIP_AUR=0
@@ -127,10 +128,22 @@ done
 SHA=$(sha256sum "$TARBALL" | awk '{print $1}'); rm -f "$TARBALL"
 ok "sha256 = $SHA"
 sed -i -E "s/^sha256sums=\('.*'\)/sha256sums=('$SHA')/" PKGBUILD
-git add PKGBUILD
-git commit -m "Pin PKGBUILD to $TAG tarball"
+
+# The Flatpak manifest pins the source by tag AND commit. Both are only
+# knowable once the tag exists, which is why this happens here rather than in
+# phase 1. Left out of the release process originally, the manifest sat on
+# v0.1.1 through three releases -- anyone building the Flatpak got 0.1.1.
+COMMIT=$(git rev-parse "$TAG^{}")
+sed -i -E "s|(\"tag\": \")v[0-9]+\.[0-9]+\.[0-9]+(\")|\\1$TAG\\2|; \
+           s|(\"commit\": \")[0-9a-f]{40}(\")|\\1$COMMIT\\2|" "$FLATPAK"
+grep -q "\"tag\": \"$TAG\"" "$FLATPAK" || die "flatpak manifest tag pin failed"
+grep -q "\"commit\": \"$COMMIT\"" "$FLATPAK" || die "flatpak manifest commit pin failed"
+ok "flatpak manifest pinned to $TAG ($COMMIT)"
+
+git add PKGBUILD "$FLATPAK"
+git commit -m "Pin PKGBUILD and Flatpak manifest to $TAG"
 git push origin main
-ok "pushed sha256 pin"
+ok "pushed sha256 + manifest pins"
 
 # ============================================================================
 if [ "$SKIP_PACKAGES" = 0 ]; then
