@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build a Debian/Ubuntu .deb and a Fedora .rpm for Workman from one staging
 # tree, using fpm. Produces architecture-independent packages (pure Python +
-# JS) that ship BOTH GNOME extension variants and select the right one on the
-# target machine at install time (see packaging/scripts/after-install.sh).
+# JS) carrying the GNOME Shell extension, which after-install.sh copies into
+# the live extension directory (see packaging/scripts/after-install.sh).
 #
 # Requirements:
 #   - python3 with the `build` and `installer` modules
@@ -52,12 +52,10 @@ exec python3 -m workman.cli "$@"
 EOF
 chmod 755 "$STAGE/usr/bin/workman"
 
-# 4. Ship BOTH extension variants; after-install.sh selects on the target.
-for v in modern legacy; do
-    mkdir -p "$STAGE/usr/share/workman/extension/$v"
-    cp "extension/$v/extension.js" "extension/$v/metadata.json" \
-       "$STAGE/usr/share/workman/extension/$v/"
-done
+# 4. Stage the extension; after-install.sh copies it into place on the target.
+mkdir -p "$STAGE/usr/share/workman/extension"
+cp extension/extension.js extension/metadata.json \
+   "$STAGE/usr/share/workman/extension/"
 
 SCRIPTS="packaging/scripts"
 COMMON=(
@@ -68,7 +66,7 @@ COMMON=(
     --maintainer "lumaseg <lumaseg@proton.me>"
     --vendor "lumaseg"
     --url "https://github.com/lumaseg/workman"
-    --description "GNOME Wayland session manager — save and restore open windows"
+    --description "Wayland session manager — save and restore open windows (GNOME, Sway)"
     --after-install "$SCRIPTS/after-install.sh"
     --after-remove  "$SCRIPTS/after-remove.sh"
 )
@@ -85,7 +83,6 @@ for t in $TARGETS; do
             fpm "${COMMON[@]}" -t deb -a all -f \
                 --depends python3 \
                 --deb-recommends gnome-shell \
-                --deb-interest-noawait /usr/bin/gnome-shell \
                 -p "$OUTDIR/workman_${VERSION}_all.deb" \
                 -C "$STAGE" usr
             ;;

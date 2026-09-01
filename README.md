@@ -17,7 +17,7 @@ You can save as many named sessions as you like. Switch between a "work" layout,
 ## Requirements
 
 - **Linux** on **Wayland**, with one of:
-  - **GNOME Shell 42 or newer** (Ubuntu 22.04 LTS and up, Fedora 36+, Arch
+  - **GNOME Shell 45 or newer** (Ubuntu 24.04 LTS and up, Fedora 39+, Arch
     rolling) — plus the bundled GNOME Shell extension
   - **Sway** (or another i3-compatible wlroots compositor) — nothing extra to
     install; Workman talks to `swaymsg` directly
@@ -75,8 +75,7 @@ source .venv/bin/activate
 pip install -e .
 
 # 2. GNOME only — install the Shell extension into your user extensions dir.
-# The script picks the modern (GNOME 45+) or legacy (GNOME 42-44) variant
-# based on the running GNOME Shell. Skip this entirely on Sway.
+# Skip this entirely on Sway; there is nothing to install.
 ./scripts/install-extension.sh
 ```
 

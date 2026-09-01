@@ -3,24 +3,20 @@
 Workman is distributed on the AUR via the top-level `PKGBUILD`. This directory
 builds the **Debian/Ubuntu `.deb`** and **Fedora `.rpm`** packages.
 
-## How the GNOME extension variant is selected
+## The GNOME extension
 
-The extension ships in two JS-incompatible variants: `modern` (ESM, GNOME 45+)
-and `legacy` (`imports.gi`, GNOME 42–44), both with UUID `workman@workman`. A
-prebuilt binary package can't pick at build time the way the PKGBUILD does,
-because the build host doesn't know the target's GNOME version. So the package
-ships **both** variants under `/usr/share/workman/extension/{modern,legacy}/`
-and selects on the target machine at install time:
+The extension ships as a single ESM variant (GNOME Shell 45+) with UUID
+`workman@workman`. The packages stage it under
+`/usr/share/workman/extension/` and `scripts/after-install.sh` copies it into
+`/usr/share/gnome-shell/extensions/workman@workman/` on install and upgrade;
+`scripts/after-remove.sh` removes it on real uninstall.
 
-- `scripts/after-install.sh` reads `gnome-shell --version` and copies the right
-  variant into `/usr/share/gnome-shell/extensions/workman@workman/`. No
-  gnome-shell present → defaults to `modern`.
-- On Debian/Ubuntu a dpkg trigger on `/usr/bin/gnome-shell`
-  (`--deb-interest-noawait`) re-runs the selection when GNOME itself is
-  upgraded, so an in-place distro upgrade (e.g. 22.04 → 24.04, GNOME 42 → 46)
-  flips `legacy` → `modern` automatically. Fedora only ever ships GNOME 45+, so
-  the variant is always `modern` there and re-selection is moot.
-- `scripts/after-remove.sh` removes the copied files on real uninstall.
+Workman 0.1.x also shipped a `legacy` (`imports.gi`) variant for GNOME 42–44,
+selected at install time, with a dpkg trigger to re-select it when GNOME itself
+was upgraded. GNOME 42–44 support was dropped after Ubuntu 22.04 ceased to be a
+target, so the variant, the selection logic and the trigger are all gone.
+
+Sway needs no extension at all.
 
 ## Building
 
